@@ -319,6 +319,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--ink);color:var(-
   <div id="mMenuBox" hidden><div class="mbox" role="dialog" aria-modal="true" aria-label="遊戲選單"><h2>遊戲暫停</h2><div class="mrbody"></div><div class="mbtns">
     <button type="button" data-a="back" class="main wide">繼續遊戲</button>
     <button type="button" data-a="rules">玩法說明</button>
+    <button type="button" data-a="walk">走路速度</button>
     <button type="button" data-a="music">音樂</button>
     <button type="button" data-a="sfx">音效</button>
     <button type="button" data-a="voice">角色語音</button>
@@ -2329,10 +2330,12 @@ async function rollDice(p,vals){const T0=TOK[p.j],t=T[p.pos],yaw=T0.g.rotation.y
     if(k<.75)d.rotation.set(spin[i].x*k,spin[i].y*k,spin[i].z*k);else{q0.setFromEuler(new THREE.Euler(spin[i].x*.75,spin[i].y*.75,spin[i].z*.75));d.quaternion.copy(q0).slerp(fin[i],Math.min(1,(k-.75)/.2));}});});}
 function hideDice(){DICE.forEach(d=>d.visible=false);}
 
+const WSPD={slow:{v:2.8,min:.9,n:'慢'},normal:{v:5,min:.6,n:'一般'},fast:{v:10,min:.38,n:'快'}},VMUL={walk:1,bike:1.6,moto:2.2,car:2.6};
+function walkSpeed(p){const w=WSPD[SET.walk]||WSPD.normal,m=VMUL[p.veh||'walk']*(p.ai&&S.fast?1.8:1);return{v:w.v*m,min:w.min/Math.sqrt(m)};}
 async function stepTo(p,to,dir){const T0=TOK[p.j],a=T[p.pos],b=T[to];let sa=a.s,sb=b.s;if(dir>0){if(sb<sa)sb+=TOT;}else{if(sb>sa)sb-=TOT;}
-  const dist=Math.abs(sb-sa),dur=Math.max(.3,dist/(p.ai&&S.fast?24:16));T0.mode='walk';T0.modeUntil=1e15;let last=0;
+  const sp=walkSpeed(p),dist=Math.abs(sb-sa),dur=Math.max(sp.min,dist/sp.v);T0.v=dist/dur;T0.mode='walk';T0.modeUntil=1e15;let last=0;
   await tween(dur,k=>{const s=sa+(sb-sa)*k,at=slotAt(p,to,s);T0.g.position.set(at.x,0,at.z);T0.g.rotation.y=Math.atan2(at.x-T0.g.position.x,at.z-T0.g.position.z)||T0.g.rotation.y;
-    const pt=pathAt(s);T0.g.rotation.y=Math.atan2(pt.dx*dir,pt.dz*dir);if(camAuto&&view==='follow')thetaWant=T0.g.rotation.y+Math.PI;if(k-last>.25/Math.max(1,dur)){last=k;sfx('step');}});
+    const pt=pathAt(s);T0.g.rotation.y=Math.atan2(pt.dx*dir,pt.dz*dir);if(camAuto&&view==='follow')thetaWant=T0.g.rotation.y+Math.PI;const ph=Math.floor((T0.ph||0)*9/Math.PI);if(ph!==last){last=ph;sfx('step');}});
   T0.mode='idle';}
 async function walk(p,n,dir,quiet){hideDice();for(let k=1;k<=n;k++){const to=nIdx(p.pos,dir);await stepTo(p,to,dir);p.pos=to;
     if(to===0){gain(p,1500,'經過起點');say(`${p.name} 經過起點，領 1,500 敬老津貼`);talk(p,'start');}
@@ -2675,7 +2678,7 @@ function loadSave(){let a=null,b=null;try{const s=JSON.parse(localStorage.getIte
   if(a&&b)return (b.at||0)>=(a.at||0)?b:a;return a||b;}
 
 /* ----- 開始、選單、結束 ----- */
-const SET={slots:['human','ai','ai','ai'],lim:30,fast:false};try{Object.assign(SET,JSON.parse(localStorage.getItem('pc_mono_set2')||'{}'));}catch(e){}
+const SET={slots:['human','ai','ai','ai'],lim:30,fast:false,walk:'normal'};try{Object.assign(SET,JSON.parse(localStorage.getItem('pc_mono_set2')||'{}'));}catch(e){}
 const RULES=`<ul class="mrules"><li>路線從入口意象出發，走過四條攤位走道、舞台四周、服務醫護站、挑戰賽區，再沿著步道到體育館南側草坪與廣場，最後從入口大門回來，一圈 128 格，不穿過牆壁、建築和球場。</li>
 <li>每人起始現金 15,000、存款 10,000、點券 120。土地用屏東 72 個景點命名，分成 9 個地區，停下來可以看景點明信片。</li>
 <li>買地後可以蓋 5 種建築，每種 5 級：<b>飯店</b>（轉盤決定住幾晚，住宿期間要休息）、<b>酒店</b>（轉盤決定每天消費和天數）、<b>賣場</b>（轉盤決定消費金額和倍數，路過也會順便買）、<b>風景區</b>（轉盤決定門票倍數）、<b>廟宇</b>（轉盤決定香油錢和倍數，捐款的人可能得到神明保佑）。等級越高，金額和天數越多。</li>
@@ -2690,11 +2693,12 @@ function setupHTML(sv){const cloud=CLOUD.ok?`<p class="mcloud on">雲端存檔�
   ${CHARS.map((c,k)=>`<div class="mset"><i style="background:${c.c}">${c.n[1]}</i><div class="mwho"><b>${c.n}</b><small>${c.d}</small></div><div class="seg" data-k="${k}">${[['human','玩家'],['ai','電腦'],['off','不玩']].map(([v,t])=>`<button type="button" data-v="${v}" class="${SET.slots[k]===v?'on':''}">${t}</button>`).join('')}</div></div>`).join('')}
   <div class="mset"><div class="mwho"><b>遊戲長度</b></div><div class="seg" data-k="lim">${[[30,'30 天'],[60,'60 天'],[0,'到剩一人']].map(([v,t])=>`<button type="button" data-v="${v}" class="${SET.lim===v?'on':''}">${t}</button>`).join('')}</div></div>
   <div class="mset"><div class="mwho"><b>電腦速度</b></div><div class="seg" data-k="fast">${[[false,'一般'],[true,'快速']].map(([v,t])=>`<button type="button" data-v="${v}" class="${SET.fast===v?'on':''}">${t}</button>`).join('')}</div></div>
+  <div class="mset"><div class="mwho"><b>人物走路速度</b></div><div class="seg" data-k="walk">${Object.keys(WSPD).map(v=>`<button type="button" data-v="${v}" class="${(SET.walk||'normal')===v?'on':''}">${WSPD[v].n}</button>`).join('')}</div></div>
   <div class="mset"><div class="mwho"><b>聲音</b></div><div class="seg multi" data-k="au">${[['music','音樂'],['sfx','音效'],['voice','語音']].map(([v,t])=>`<button type="button" data-v="${v}" class="${AU[v]?'on':''}">${t}</button>`).join('')}</div></div>
   <p class="merr" id="mErr"></p>${cloud}${sv?`<p class="mnote">有一局還沒玩完（${sv.P.map(p=>p.name).join('、')}，第 ${sv.day+1} 天），可以接著玩。</p>`:''}`;}
 function bindSeg(){mmB.querySelectorAll('.seg').forEach(sg=>sg.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const k=sg.dataset.k,v=b.dataset.v;sfx('click');
   if(k==='au'){AU[v]=!AU[v];b.classList.toggle('on',AU[v]);auSave();auInit();if(v==='music')musicOn(AU.music);if(v==='sfx'&&AU.sg)AU.sg.gain.value=AU.sfx?.5:0;if(v==='voice'&&AU.voice)speak('語音開啟',0);return;}
-  sg.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));if(k==='lim')SET.lim=+v;else if(k==='fast')SET.fast=v==='true';else SET.slots[+k]=v;try{localStorage.setItem('pc_mono_set2',JSON.stringify(SET));}catch(e){}}));}
+  sg.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));if(k==='lim')SET.lim=+v;else if(k==='fast')SET.fast=v==='true';else if(k==='walk')SET.walk=v;else SET.slots[+k]=v;try{localStorage.setItem('pc_mono_set2',JSON.stringify(SET));}catch(e){}}));}
 function showSetup(){const sv=loadSave();closeModal();curMark.visible=false;
   showModal('熟齡大富翁',setupHTML(sv),[['開始新的一局','new','main wide'],...(sv?[['接著玩上一局','cont','wide']]:[]),['玩法說明','rules'],['回到漫遊','leave']],{onClick:v=>{
     if(v==='new'){const n=SET.slots.filter(x=>x!=='off').length;if(n<2){$('mErr').textContent='至少要 2 位參加（玩家或電腦）。';return;}closeModal();newGame(SET);start();}
@@ -2703,10 +2707,11 @@ function showSetup(){const sv=loadSave();closeModal();curMark.visible=false;
     if(v==='leave')leave();}});bindSeg();}
 function start(){auInit();startMusic();root.classList.add('playing');hud();say('遊戲開始！');view='follow';bView.textContent='看全景';orbit.r=14;orbit.phi=1.02;if(S.P[S.cur])setFocus(S.P[S.cur]);save();loop();}
 const menuEl=$('mMenuBox');
-function menuBtns(){menuEl.querySelectorAll('[data-a=music],[data-a=sfx],[data-a=voice]').forEach(b=>{const k=b.dataset.a;b.textContent={music:'音樂',sfx:'音效',voice:'角色語音'}[k]+(AU[k]?'：開':'：關');});}
+function menuBtns(){const wb=menuEl.querySelector('[data-a=walk]');if(wb)wb.textContent=`走路速度：${(WSPD[SET.walk]||WSPD.normal).n}`;menuEl.querySelectorAll('[data-a=music],[data-a=sfx],[data-a=voice]').forEach(b=>{const k=b.dataset.a;b.textContent={music:'音樂',sfx:'音效',voice:'角色語音'}[k]+(AU[k]?'：開':'：關');});}
 function openMenu(){paused=true;menuBtns();menuEl.hidden=false;}
 function closeMenu(){paused=false;menuEl.hidden=true;menuEl.querySelector('.mrbody').innerHTML='';}
 menuEl.addEventListener('click',e=>{const b=e.target.closest('button');if(!b){if(e.target===menuEl)closeMenu();return;}const a=b.dataset.a;sfx('click');
+  if(a==='walk'){const ks=Object.keys(WSPD),i=ks.indexOf(SET.walk||'normal');SET.walk=ks[(i+1)%ks.length];try{localStorage.setItem('pc_mono_set2',JSON.stringify(SET));}catch(e){}menuBtns();}
   if(a==='back')closeMenu();if(a==='rules')menuEl.querySelector('.mrbody').innerHTML=RULES;
   if(a==='music'){auInit();musicOn(!AU.music);if(AU.music)startMusic();menuBtns();}if(a==='sfx'){AU.sfx=!AU.sfx;auSave();auInit();if(AU.sg)AU.sg.gain.value=AU.sfx?.5:0;menuBtns();}if(a==='voice'){AU.voice=!AU.voice;auSave();if(AU.voice)speak('語音開啟',0);else try{speechSynthesis.cancel();}catch(e){}menuBtns();}
   if(a==='night'){dusk=!dusk;applyTime();}if(a==='restart'){closeMenu();abortAll();save();setTimeout(showSetup,0);}if(a==='leave'){closeMenu();leave();}});
@@ -2733,7 +2738,7 @@ function tick(_dt,t){const now0=performance.now();let dt=lastNow?(now0-lastNow)/
   mineLight.emissiveIntensity=Math.sin(t*6)>0?1.4:.2;SPIN.forEach(w=>w.rotation.z+=dt*.25);SMOKE.forEach((m,k)=>{const q=(t*.5+k*.37)%1;m.position.y=1.5+q*2.4;m.scale.setScalar(.6+q*1.6);m.material.opacity=.4*(1-q);});
   if(mode==='mono'&&S&&(t-(tick.mt||0)>.4)){tick.mt=t;drawMap();}
   const now=performance.now();
-  TOK.forEach((T0,j)=>{if(!T0||!T0.g.visible)return;if(T0.mode!=='walk'&&T0.modeUntil&&now>T0.modeUntil)T0.mode='idle';const pv=S&&S.P[j]&&S.P[j].veh;pose(T0.hm,pv&&pv!=='walk'?(pv==='bike'&&T0.mode==='walk'?'ride':'rideM'):T0.mode,t+j);if(T0.vm&&T0.mode==='walk'){T0.vm.children.forEach(c=>{if(c.geometry&&c.geometry.type==='TorusGeometry')c.rotation.x+=dt*8;});}if(T0.gf){T0.gf.position.y=1.7+Math.sin(t*2.5)*.1;T0.gf.rotation.y=Math.sin(t)*.4;}});
+  TOK.forEach((T0,j)=>{if(!T0||!T0.g.visible)return;if(T0.mode!=='walk'&&T0.modeUntil&&now>T0.modeUntil)T0.mode='idle';const pv=S&&S.P[j]&&S.P[j].veh;if(T0.mode==='walk')T0.ph=(T0.ph||0)+dt*.44*Math.min(T0.v||5,pv&&pv!=='walk'?8:6);pose(T0.hm,pv&&pv!=='walk'?(pv==='bike'&&T0.mode==='walk'?'ride':'rideM'):T0.mode,T0.mode==='walk'?T0.ph:t+j);if(T0.vm&&T0.mode==='walk'){T0.vm.children.forEach(c=>{if(c.geometry&&c.geometry.type==='TorusGeometry')c.rotation.x+=dt*(T0.v||5)*2.8;});}if(T0.gf){T0.gf.position.y=1.7+Math.sin(t*2.5)*.1;T0.gf.rotation.y=Math.sin(t)*.4;}});
   if(S&&curMark.visible){const p=S.P[S.cur],T0=p&&TOK[p.j];if(T0){curMark.position.set(T0.g.position.x,T0.g.position.y+3.9+Math.sin(t*3)*.15,T0.g.position.z);curMark.rotation.y=t*1.5;}}
   if(mode!=='mono')return;
   if(S)TOK.forEach((T0,j)=>{const b=BUB[j];if(!b||!T0)return;if(now>+b.dataset.until||!T0.g.visible){b.classList.remove('show');return;}_v.copy(T0.g.position);_v.y+=3.4+(j%2)*.62;_v.project(camera);if(_v.z>1){b.style.visibility='hidden';return;}b.style.visibility='';b.style.transform=`translate(${(_v.x*.5+.5)*innerWidth}px,${(-_v.y*.5+.5)*innerHeight}px) translate(-50%,-100%)`;});
@@ -2751,7 +2756,7 @@ let MB=null;function drawMap(){if(!mMap||mMap.offsetParent===null)return;const c
 /* 入口資訊點 */
 poi(T[0].x,T[0].z,7,'遊戲','#e5484d','熟齡大富翁（繞行整個活動場地）','從入口意象出發，走過攤位、舞台、體育館、田徑場、屏東公園再回來。屏東 63 個景點當土地，可以蓋飯店和賣場，有神明、卡片道具和多種趣味關卡。1～4 人，可和電腦對戰。','mono');
 const sv0=(()=>{try{const s=JSON.parse(localStorage.getItem(KEY)||'null');return s&&s.v===3&&!s.over?s:null;}catch(e){return null;}})();if(sv0){S=sv0;rebuild();}else drawAll();
-return {open,leave,tick,tap,manual,camC,get active(){return mode==='mono';},get state(){return S;},_test:{newGame,start,loop,SET,showSetup,abortAll,AU,CLOUD,T,LAND,set speed(v){SPEED=v;},set ws(v){WS=v;},noRender(){renderer.render=()=>{};},showcase(){const Ls=T.filter(t=>t.k==='L').map(t=>t.i),pl=Ls.filter(i=>T[i].plot),ve=Ls.filter(i=>!T[i].plot);const ty=['H','J','M','S','T'];
+return {open,leave,tick,tap,manual,camC,get active(){return mode==='mono';},get state(){return S;},_test:{newGame,start,loop,SET,showSetup,abortAll,AU,CLOUD,T,LAND,set speed(v){SPEED=v;},set ws(v){WS=v;},tok(){return TOK.map(t=>[t.g.position.x,t.g.position.z,t.mode]);},noRender(){renderer.render=()=>{};},showcase(){const Ls=T.filter(t=>t.k==='L').map(t=>t.i),pl=Ls.filter(i=>T[i].plot),ve=Ls.filter(i=>!T[i].plot);const ty=['H','J','M','S','T'];
   pl.forEach((i,k)=>{S.L[i]={o:k%S.P.length,lv:5-(k%3)*2,bt:ty[k%5]};refreshLand(i);});ve.forEach((i,k)=>{if(k%2)return;S.L[i]={o:k%S.P.length,lv:1+k%5,bt:ty[k%5]};refreshLand(i);});drawAll();
   const vs=['car','moto','bike','walk'];S.P.forEach((p,k)=>{p.veh=vs[k];setVeh(p);});return pl.map(i=>[i,Math.round(T[i].plot.x),Math.round(T[i].plot.z),S.L[i].bt+S.L[i].lv]);},
   place(i){S.P.forEach((p,k)=>{p.pos=nIdx(i,k);const at=slotAt(p,p.pos);TOK[p.j].g.position.set(at.x,0,at.z);TOK[p.j].g.rotation.y=at.yaw;});},async audioTest(sec,song){const oc=new OfflineAudioContext(1,44100*sec,44100);let now=0;const px=new Proxy(oc,{get(o,k){if(k==='currentTime')return now;const v=o[k];return typeof v==='function'?v.bind(o):v;}});
